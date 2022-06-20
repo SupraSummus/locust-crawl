@@ -6,12 +6,14 @@ from locust import HttpUser, task
 
 
 class Crawler(HttpUser):
+    max_depth = 20
+
     @task
     def crawl(self):
         base_url = self.client.base_url
         url = '/'
         visited = set()
-        while True:
+        while len(visited) < self.max_depth:
             response = self.client.get(url)
             visited.add(url)
 
