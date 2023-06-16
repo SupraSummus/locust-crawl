@@ -1,29 +1,39 @@
 import random
 from urllib.parse import urljoin
+import re
 
 from bs4 import BeautifulSoup
 from locust import HttpUser, task
 
 
 class Crawler(HttpUser):
-    max_depth = 20
+    max_depth = 100
 
     @task
     def crawl(self):
         base_url = self.client.base_url
-        url = '/'
+        to_be_visited = ['/']
         visited = set()
-        while len(visited) < self.max_depth:
-            response = self.client.get(url)
+        while len(visited) < self.max_depth and to_be_visited:
+            url = to_be_visited.pop()
+            assert url not in visited
+            response = self.client.get(
+                url,
+                headers={
+                    'Accept': 'text/html',
+                },
+                name=self.get_link_name(url),
+            )
             visited.add(url)
 
             links = self.get_links_on_page(response)
             links = self.filter_links(links, base_url, visited)
             links = list(links)
 
-            if not links:
-                break
-            url = random.choice(links)
+            random.shuffle(links)
+            to_be_visited.extend(links)
+            while to_be_visited and to_be_visited[-1] in visited:
+                to_be_visited.pop()
 
     def get_links_on_page(self, response):
         html_text = response.text
@@ -50,3 +60,11 @@ class Crawler(HttpUser):
             if link in visited:
                 continue
             yield link
+
+    def get_link_name(self, url):
+        # remove base url
+        if url.startswith(self.client.base_url):
+            url = url[len(self.client.base_url):]
+        # replace decimal number path segment /<dec>/
+        url = re.sub(r'/\d+/', '/<dec>/', url)
+        return url
